@@ -1,0 +1,8 @@
+.DS_Store
+database.db
+__pycache__/
+*.pyc
+85b6466e-cfa7-4678-ab3a-48a806fc4162.jpeg
+app.py
+templates/
+static/

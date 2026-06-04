@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>МЦР Протек — Контроль Данных</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="css/app.css" rel="stylesheet">
+</head>
+<body>
+    <!-- LOGIN PAGE -->
+    <div id="page-login" class="login-container">
+        <div class="card login-card">
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    <i class="bi bi-clock-history" style="font-size:3rem;color:var(--accent-color)"></i>
+                    <h4 class="mt-2">МЦР Протек</h4>
+                    <p class="text-muted">Контроль отработанных часов</p>
+                </div>
+                <div id="login-error" class="alert alert-danger py-2" style="display:none"></div>
+                <form id="login-form">
+                    <div class="mb-3">
+                        <label class="form-label">Логин</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control" id="login-username" placeholder="Введите логин" required autofocus>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">Пароль</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password" class="form-control" id="login-password" placeholder="Введите пароль" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-accent w-100 py-2">
+                        <i class="bi bi-box-arrow-in-right"></i> Войти
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- BRIGADIER DASHBOARD -->
+    <div id="page-brigadier" style="display:none">
+        <nav class="navbar navbar-expand-lg navbar-custom">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#"><i class="bi bi-clock-history"></i> МЦР Протек</a>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3">
+                        <i class="bi bi-person-circle"></i>
+                        <span id="brig-name"></span>
+                        <span class="badge bg-warning text-dark">Бригадир</span>
+                    </span>
+                    <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                        <i class="bi bi-box-arrow-right"></i> Выход
+                    </button>
+                </div>
+            </div>
+        </nav>
+        <div class="container-fluid mt-3">
+            <div id="brig-alert" class="alert" style="display:none"></div>
+            <div class="row g-0">
+                <div class="col-md-2 sidebar bg-white p-3 shadow-sm">
+                    <h6 class="text-muted mb-3"><i class="bi bi-gear"></i> Управление</h6>
+                    <nav class="nav flex-column">
+                        <a class="nav-link active" href="#" onclick="showBrigTab('tab-table',this)"><i class="bi bi-table"></i> Таблица часов</a>
+                        <a class="nav-link" href="#" onclick="showBrigTab('tab-employees',this)"><i class="bi bi-people"></i> Сотрудники</a>
+                        <a class="nav-link" href="#" onclick="showBrigTab('tab-month',this)"><i class="bi bi-calendar-check"></i> Управление месяцем</a>
+                    </nav>
+                </div>
+                <div class="col-md-10 p-3">
+                    <!-- TABLE TAB -->
+                    <div id="tab-table">
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                            <h5 class="mb-0"><i class="bi bi-table"></i> Учёт отработанных часов</h5>
+                            <div class="month-nav d-flex align-items-center gap-2">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(-1)"><i class="bi bi-chevron-left"></i></button>
+                                <select class="form-select form-select-sm" style="width:100px" id="selMonth" onchange="renderTable()"></select>
+                                <select class="form-select form-select-sm" style="width:85px" id="selYear" onchange="renderTable()"></select>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(1)"><i class="bi bi-chevron-right"></i></button>
+                                <span id="month-status"></span>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-body p-0">
+                                <div class="table-container" style="max-height:72vh;overflow:auto" id="table-container"></div>
+                                <div class="p-3 d-flex gap-2" id="table-actions">
+                                    <button class="btn btn-accent" onclick="saveAllRecords()"><i class="bi bi-save"></i> Сохранить все изменения</button>
+                                    <button class="btn btn-outline-secondary" onclick="openBreakModal()"><i class="bi bi-cup-hot"></i> Управление перерывами</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- EMPLOYEES TAB -->
+                    <div id="tab-employees" style="display:none">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0"><i class="bi bi-people"></i> Список сотрудников</h5>
+                            <button class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#addEmployeeModal"><i class="bi bi-person-plus"></i> Добавить сотрудника</button>
+                        </div>
+                        <div class="card"><div class="card-body p-0" id="employees-list"></div></div>
+                    </div>
+                    <!-- MONTH TAB -->
+                    <div id="tab-month" style="display:none">
+                        <h5 class="mb-3"><i class="bi bi-calendar-check"></i> Управление месяцем</h5>
+                        <div class="card"><div class="card-body" id="month-control"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EMPLOYEE DASHBOARD -->
+    <div id="page-employee" style="display:none">
+        <nav class="navbar navbar-expand-lg navbar-custom">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#"><i class="bi bi-clock-history"></i> МЦР Протек</a>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3">
+                        <i class="bi bi-person-circle"></i>
+                        <span id="emp-name"></span>
+                        <span class="badge bg-info">Сотрудник</span>
+                    </span>
+                    <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                        <i class="bi bi-box-arrow-right"></i> Выход
+                    </button>
+                </div>
+            </div>
+        </nav>
+        <div class="container-fluid mt-3">
+            <div class="row justify-content-center">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h5><i class="bi bi-person-circle"></i> <span id="emp-title"></span></h5>
+                        <div class="month-nav d-flex align-items-center gap-2">
+                            <button class="btn btn-outline-secondary btn-sm" onclick="changeMonthEmp(-1)"><i class="bi bi-chevron-left"></i></button>
+                            <select class="form-select form-select-sm" style="width:100px" id="selMonthEmp" onchange="renderEmployeeView()"></select>
+                            <select class="form-select form-select-sm" style="width:85px" id="selYearEmp" onchange="renderEmployeeView()"></select>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="changeMonthEmp(1)"><i class="bi bi-chevron-right"></i></button>
+                        </div>
+                    </div>
+                    <div id="emp-summary" class="mb-4"></div>
+                    <div id="emp-detail"></div>
+                    <p class="text-muted mt-3 text-center"><i class="bi bi-info-circle"></i> Это режим просмотра. Редактирование доступно только бригадиру.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD EMPLOYEE MODAL -->
+    <div class="modal fade" id="addEmployeeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus"></i> Добавить сотрудника</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <form id="add-emp-form">
+                    <div class="modal-body">
+                        <div class="mb-3"><label class="form-label">ФИО</label><input type="text" class="form-control" id="add-fullname" required placeholder="Иванов Иван Иванович"></div>
+                        <div class="mb-3"><label class="form-label">Логин</label><input type="text" class="form-control" id="add-username" required placeholder="ivanov"></div>
+                        <div class="mb-3"><label class="form-label">Пароль</label><input type="password" class="form-control" id="add-password" required placeholder="Минимум 4 символа" minlength="4"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-accent"><i class="bi bi-check-lg"></i> Добавить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT EMPLOYEE MODAL -->
+    <div class="modal fade" id="editEmployeeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil"></i> Редактировать сотрудника</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <form id="edit-emp-form">
+                    <input type="hidden" id="edit-emp-id">
+                    <div class="modal-body">
+                        <div class="mb-3"><label class="form-label">ФИО</label><input type="text" class="form-control" id="edit-fullname" required></div>
+                        <div class="mb-3"><label class="form-label">Логин</label><input type="text" class="form-control" id="edit-username" required></div>
+                        <div class="mb-3"><label class="form-label">Новый пароль (оставьте пустым, чтобы не менять)</label><input type="password" class="form-control" id="edit-password" placeholder="Новый пароль"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-accent"><i class="bi bi-check-lg"></i> Сохранить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- BREAK MODAL -->
+    <div class="modal fade" id="breakModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-cup-hot"></i> Управление перерывами</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Сотрудник</label><select class="form-select" id="break-employee" onchange="loadBreaks()"></select></div>
+                    <div id="break-table-container"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-accent" onclick="saveBreaks()"><i class="bi bi-save"></i> Сохранить перерывы</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DELETE MODAL -->
+    <div class="modal fade" id="deleteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger"><h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Удаление</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body"><p>Вы уверены, что хотите удалить сотрудника <strong id="delete-name"></strong>?</p><p class="text-muted">Все данные о часах будут также удалены.</p></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDelete()"><i class="bi bi-trash"></i> Удалить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/sha256.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
