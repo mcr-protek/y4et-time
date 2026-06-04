@@ -42,6 +42,71 @@
         </div>
     </div>
 
+    <!-- ADMIN DASHBOARD -->
+    <div id="page-admin" style="display:none">
+        <nav class="navbar navbar-expand-lg navbar-custom">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#"><i class="bi bi-clock-history"></i> МЦР Протек</a>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3">
+                        <i class="bi bi-person-gear"></i>
+                        <span id="admin-name"></span>
+                        <span class="badge bg-danger">Администратор</span>
+                    </span>
+                    <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                        <i class="bi bi-box-arrow-right"></i> Выход
+                    </button>
+                </div>
+            </div>
+        </nav>
+        <div class="container-fluid mt-3">
+            <div class="row g-0">
+                <div class="col-md-2 sidebar bg-white p-3 shadow-sm">
+                    <h6 class="text-muted mb-3"><i class="bi bi-shield-lock"></i> Панель админа</h6>
+                    <nav class="nav flex-column">
+                        <a class="nav-link active" href="#" onclick="showAdminTab('tab-admin-table',this)"><i class="bi bi-table"></i> Таблица часов</a>
+                        <a class="nav-link" href="#" onclick="showAdminTab('tab-admin-users',this)"><i class="bi bi-people"></i> Все пользователи</a>
+                        <a class="nav-link" href="#" onclick="showAdminTab('tab-admin-month',this)"><i class="bi bi-calendar-check"></i> Управление месяцем</a>
+                    </nav>
+                </div>
+                <div class="col-md-10 p-3">
+                    <div id="tab-admin-table">
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                            <h5 class="mb-0"><i class="bi bi-table"></i> Учёт отработанных часов</h5>
+                            <div class="month-nav d-flex align-items-center gap-2">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(-1)"><i class="bi bi-chevron-left"></i></button>
+                                <select class="form-select form-select-sm" style="width:100px" id="selMonth" onchange="renderAdminTable()"></select>
+                                <select class="form-select form-select-sm" style="width:85px" id="selYear" onchange="renderAdminTable()"></select>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(1)"><i class="bi bi-chevron-right"></i></button>
+                                <span id="admin-month-status"></span>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-body p-0">
+                                <div class="table-container" style="max-height:72vh;overflow:auto" id="admin-table-container"></div>
+                                <div class="p-3 d-flex gap-2" id="admin-table-actions">
+                                    <button class="btn btn-accent" onclick="saveAdminRecords()"><i class="bi bi-save"></i> Сохранить все изменения</button>
+                                    <button class="btn btn-outline-secondary" onclick="openAdminBreakModal()"><i class="bi bi-cup-hot"></i> Управление перерывами</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tab-admin-users" style="display:none">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0"><i class="bi bi-people"></i> Все пользователи</h5>
+                            <button class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#addEmployeeModal"><i class="bi bi-person-plus"></i> Добавить пользователя</button>
+                        </div>
+                        <div class="card"><div class="card-body p-0" id="admin-users-list"></div></div>
+                    </div>
+                    <div id="tab-admin-month" style="display:none">
+                        <h5 class="mb-3"><i class="bi bi-calendar-check"></i> Управление месяцем</h5>
+                        <div class="card"><div class="card-body" id="admin-month-control"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- BRIGADIER DASHBOARD -->
     <div id="page-brigadier" style="display:none">
         <nav class="navbar navbar-expand-lg navbar-custom">
@@ -60,7 +125,6 @@
             </div>
         </nav>
         <div class="container-fluid mt-3">
-            <div id="brig-alert" class="alert" style="display:none"></div>
             <div class="row g-0">
                 <div class="col-md-2 sidebar bg-white p-3 shadow-sm">
                     <h6 class="text-muted mb-3"><i class="bi bi-gear"></i> Управление</h6>
@@ -71,14 +135,13 @@
                     </nav>
                 </div>
                 <div class="col-md-10 p-3">
-                    <!-- TABLE TAB -->
                     <div id="tab-table">
                         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <h5 class="mb-0"><i class="bi bi-table"></i> Учёт отработанных часов</h5>
                             <div class="month-nav d-flex align-items-center gap-2">
                                 <button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(-1)"><i class="bi bi-chevron-left"></i></button>
-                                <select class="form-select form-select-sm" style="width:100px" id="selMonth" onchange="renderTable()"></select>
-                                <select class="form-select form-select-sm" style="width:85px" id="selYear" onchange="renderTable()"></select>
+                                <select class="form-select form-select-sm" style="width:100px" id="selMonthBrig"></select>
+                                <select class="form-select form-select-sm" style="width:85px" id="selYearBrig"></select>
                                 <button class="btn btn-outline-secondary btn-sm" onclick="changeMonth(1)"><i class="bi bi-chevron-right"></i></button>
                                 <span id="month-status"></span>
                             </div>
@@ -93,7 +156,6 @@
                             </div>
                         </div>
                     </div>
-                    <!-- EMPLOYEES TAB -->
                     <div id="tab-employees" style="display:none">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0"><i class="bi bi-people"></i> Список сотрудников</h5>
@@ -101,7 +163,6 @@
                         </div>
                         <div class="card"><div class="card-body p-0" id="employees-list"></div></div>
                     </div>
-                    <!-- MONTH TAB -->
                     <div id="tab-month" style="display:none">
                         <h5 class="mb-3"><i class="bi bi-calendar-check"></i> Управление месяцем</h5>
                         <div class="card"><div class="card-body" id="month-control"></div></div>
@@ -142,7 +203,7 @@
                     </div>
                     <div id="emp-summary" class="mb-4"></div>
                     <div id="emp-detail"></div>
-                    <p class="text-muted mt-3 text-center"><i class="bi bi-info-circle"></i> Это режим просмотра. Редактирование доступно только бригадиру.</p>
+                    <p class="text-muted mt-3 text-center"><i class="bi bi-info-circle"></i> Это режим просмотра. Редактирование доступно только бригадиру или администратору.</p>
                 </div>
             </div>
         </div>
@@ -152,12 +213,13 @@
     <div class="modal fade" id="addEmployeeModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus"></i> Добавить сотрудника</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus"></i> Добавить пользователя</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                 <form id="add-emp-form">
                     <div class="modal-body">
                         <div class="mb-3"><label class="form-label">ФИО</label><input type="text" class="form-control" id="add-fullname" required placeholder="Иванов Иван Иванович"></div>
                         <div class="mb-3"><label class="form-label">Логин</label><input type="text" class="form-control" id="add-username" required placeholder="ivanov"></div>
                         <div class="mb-3"><label class="form-label">Пароль</label><input type="password" class="form-control" id="add-password" required placeholder="Минимум 4 символа" minlength="4"></div>
+                        <div class="mb-3" id="add-role-container" style="display:none"><label class="form-label">Роль</label><select class="form-select" id="add-role"><option value="employee">Сотрудник</option><option value="brigadier">Бригадир</option></select></div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -172,7 +234,7 @@
     <div class="modal fade" id="editEmployeeModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil"></i> Редактировать сотрудника</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil"></i> Редактировать пользователя</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                 <form id="edit-emp-form">
                     <input type="hidden" id="edit-emp-id">
                     <div class="modal-body">
@@ -211,7 +273,7 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-danger"><h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Удаление</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-                <div class="modal-body"><p>Вы уверены, что хотите удалить сотрудника <strong id="delete-name"></strong>?</p><p class="text-muted">Все данные о часах будут также удалены.</p></div>
+                <div class="modal-body"><p>Вы уверены, что хотите удалить пользователя <strong id="delete-name"></strong>?</p><p class="text-muted">Все данные о часах будут также удалены.</p></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="button" class="btn btn-danger" onclick="confirmDelete()"><i class="bi bi-trash"></i> Удалить</button>

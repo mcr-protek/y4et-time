@@ -1,5 +1,6 @@
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const DAYS = 31;
+const ADMIN_PASSWORD = 'MCR@Protek2026!Admin';
 let currentUser = null;
 let deleteTargetId = null;
 
@@ -7,10 +8,13 @@ function getDB() {
     const raw = localStorage.getItem('mcr_db');
     if (!raw) {
         const init = {
-            users: [{ id: 1, username: 'brigadier', passwordHash: '', fullName: 'Бригадир', role: 'brigadier' }],
+            users: [
+                { id: 1, username: 'admin', passwordHash: '', fullName: 'Администратор', role: 'admin' },
+                { id: 2, username: 'brigadier', passwordHash: '', fullName: 'Бригадир', role: 'brigadier' }
+            ],
             records: {},
             months: {},
-            nextId: 2
+            nextId: 3
         };
         localStorage.setItem('mcr_db', JSON.stringify(init));
         return init;
@@ -22,13 +26,17 @@ function saveDB(db) {
     localStorage.setItem('mcr_db', JSON.stringify(db));
 }
 
-async function initBrigadierPassword() {
+async function initPasswords() {
     const db = getDB();
-    const brig = db.users.find(u => u.role === 'brigadier');
-    if (!brig.passwordHash) {
-        brig.passwordHash = await sha256('brigadier123');
-        saveDB(db);
+    const admin = db.users.find(u => u.role === 'admin');
+    if (!admin.passwordHash) {
+        admin.passwordHash = await sha256(ADMIN_PASSWORD);
     }
+    const brig = db.users.find(u => u.role === 'brigadier');
+    if (brig && !brig.passwordHash) {
+        brig.passwordHash = await sha256('brigadier123');
+    }
+    saveDB(db);
 }
 
 function getRecordKey(empId, year, month, day) {
@@ -44,6 +52,9 @@ function isMonthClosed(year, month) {
     const mk = getMonthKey(year, month);
     return db.months[mk] && db.months[mk].closed;
 }
+
+function isAdmin() { return currentUser && currentUser.role === 'admin'; }
+function isBrigadier() { return currentUser && currentUser.role === 'brigadier'; }
 
 // AUTH
 document.getElementById('login-form').addEventListener('submit', async function(e) {
@@ -63,7 +74,9 @@ document.getElementById('login-form').addEventListener('submit', async function(
     currentUser = { id: user.id, username: user.username, fullName: user.fullName, role: user.role };
     sessionStorage.setItem('mcr_session', JSON.stringify(currentUser));
 
-    if (user.role === 'brigadier') {
+    if (user.role === 'admin') {
+        showAdmin();
+    } else if (user.role === 'brigadier') {
         showBrigadier();
     } else {
         showEmployee();
@@ -73,6 +86,7 @@ document.getElementById('login-form').addEventListener('submit', async function(
 function logout() {
     currentUser = null;
     sessionStorage.removeItem('mcr_session');
+    document.getElementById('page-admin').style.display = 'none';
     document.getElementById('page-brigadier').style.display = 'none';
     document.getElementById('page-employee').style.display = 'none';
     document.getElementById('page-login').style.display = 'flex';
@@ -85,18 +99,269 @@ function checkSession() {
     const s = sessionStorage.getItem('mcr_session');
     if (s) {
         currentUser = JSON.parse(s);
-        if (currentUser.role === 'brigadier') showBrigadier();
+        if (currentUser.role === 'admin') showAdmin();
+        else if (currentUser.role === 'brigadier') showBrigadier();
         else showEmployee();
     }
 }
 
-// BRIGADIER
+// ===================== ADMIN =====================
+function showAdmin() {
+    document.getElementById('page-login').style.display = 'none';
+    document.getElementById('page-brigadier').style.display = 'none';
+    document.getElementById('page-employee').style.display = 'none';
+    document.getElementById('page-admin').style.display = 'block';
+    document.getElementById('admin-name').textContent = currentUser.fullName;
+    document.getElementById('add-role-container').style.display = 'block';
+    initMonthSelectors('selMonth', 'selYear');
+    renderAdminTable();
+    renderAdminUsers();
+    renderAdminMonthControl();
+}
+
+function showAdminTab(tabId, el) {
+    document.querySelectorAll('#page-admin [id^="tab-"]').forEach(t => t.style.display = 'none');
+    document.getElementById(tabId).style.display = 'block';
+    document.querySelectorAll('.sidebar .nav-link').forEach(l => l.classList.remove('active'));
+    if (el) el.classList.add('active');
+}
+
+function renderAdminTable() {
+    const year = parseInt(document.getElementById('selYear').value);
+    const month = parseInt(document.getElementById('selMonth').value);
+    const db = getDB();
+    const employees = db.users.filter(u => u.role === 'employee');
+    const closed = isMonthClosed(year, month);
+
+    document.getElementById('admin-month-status').innerHTML = closed
+        ? '<span class="badge-closed"><i class="bi bi-lock"></i> Месяц закрыт</span>' : '';
+    document.getElementById('admin-table-actions').style.display = closed ? 'none' : 'flex';
+
+    let html = '<table class="table table-bordered table-hover time-table mb-0"><thead><tr class="sticky-header-row"><th>ФИО</th>';
+    for (let d = 1; d <= DAYS; d++) html += `<th>${d}</th>`;
+    html += '<th class="cell-total">Часы</th><th class="cell-break">Перерывы</th><th>Итого без перерывов</th></tr></thead><tbody>';
+
+    employees.forEach(emp => {
+        let totalH = 0, totalB = 0;
+        html += `<tr data-emp-id="${emp.id}"><td class="employee-row-name">${emp.fullName}</td>`;
+        for (let d = 1; d <= DAYS; d++) {
+            const key = getRecordKey(emp.id, year, month, d);
+            const rec = db.records[key] || {};
+            const h = rec.hours || 0;
+            const bh = rec.breakHours || 0;
+            totalH += h;
+            totalB += bh;
+            html += `<td class="cell-hours">`;
+            if (closed) {
+                html += h > 0 ? `<span>${h}</span>` : '';
+            } else {
+                html += `<input type="number" min="0" max="24" step="0.5" value="${h||''}" data-emp-id="${emp.id}" data-day="${d}" class="hours-input">`;
+            }
+            html += `</td>`;
+        }
+        const net = totalH - totalB;
+        html += `<td class="cell-total total-hours">${totalH}</td>`;
+        html += `<td class="cell-break total-breaks">${totalB}</td>`;
+        html += `<td class="cell-total net-hours">${Math.max(0,net)}</td>`;
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('admin-table-container').innerHTML = html;
+
+    document.querySelectorAll('.hours-input').forEach(inp => {
+        inp.addEventListener('input', function() { recalcRow(this.closest('tr'), year, month); });
+    });
+}
+
+function renderAdminUsers() {
+    const db = getDB();
+    const users = db.users.filter(u => u.role !== 'admin');
+    let html = '<table class="table table-hover mb-0"><thead><tr><th>ФИО</th><th>Логин</th><th>Роль</th><th>Действия</th></tr></thead><tbody>';
+    users.forEach(u => {
+        const roleLabel = u.role === 'brigadier' ? '<span class="badge bg-warning text-dark">Бригадир</span>' : '<span class="badge bg-info">Сотрудник</span>';
+        const canPromote = u.role === 'employee';
+        const canDemote = u.role === 'brigadier';
+        html += `<tr><td>${u.fullName}</td><td><code>${u.username}</code></td><td>${roleLabel}</td><td>
+            <button class="btn btn-sm btn-outline-primary" onclick="editUser(${u.id})"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${u.id},'${u.fullName.replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button>
+            ${canPromote ? `<button class="btn btn-sm btn-outline-success" onclick="promoteUser(${u.id})" title="Назначить бригадиром"><i class="bi bi-arrow-up-circle"></i></button>` : ''}
+            ${canDemote ? `<button class="btn btn-sm btn-outline-secondary" onclick="demoteUser(${u.id})" title="Понизить до сотрудника"><i class="bi bi-arrow-down-circle"></i></button>` : ''}
+        </td></tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('admin-users-list').innerHTML = html;
+}
+
+function promoteUser(id) {
+    const db = getDB();
+    const user = db.users.find(u => u.id === id);
+    if (!user || user.role !== 'employee') return;
+    user.role = 'brigadier';
+    saveDB(db);
+    renderAdminUsers();
+    showToast(`${user.fullName} назначен бригадиром`, 'success');
+}
+
+function demoteUser(id) {
+    const db = getDB();
+    const user = db.users.find(u => u.id === id);
+    if (!user || user.role !== 'brigadier') return;
+    user.role = 'employee';
+    saveDB(db);
+    renderAdminUsers();
+    showToast(`${user.fullName} понижен до сотрудника`, 'success');
+}
+
+function editUser(id) {
+    const db = getDB();
+    const user = db.users.find(u => u.id === id);
+    if (!user) return;
+    document.getElementById('edit-emp-id').value = id;
+    document.getElementById('edit-fullname').value = user.fullName;
+    document.getElementById('edit-username').value = user.username;
+    document.getElementById('edit-password').value = '';
+    new bootstrap.Modal(document.getElementById('editEmployeeModal')).show();
+}
+
+function deleteUser(id, name) {
+    deleteTargetId = id;
+    document.getElementById('delete-name').textContent = name;
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+function confirmDelete() {
+    if (!deleteTargetId) return;
+    const db = getDB();
+    db.users = db.users.filter(u => u.id !== deleteTargetId);
+    Object.keys(db.records).forEach(key => {
+        if (key.startsWith(deleteTargetId + '_')) delete db.records[key];
+    });
+    saveDB(db);
+    bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+    if (isAdmin()) { renderAdminUsers(); renderAdminTable(); }
+    else { renderEmployees(); renderTable(); }
+    showToast('Пользователь удалён', 'success');
+    deleteTargetId = null;
+}
+
+document.getElementById('add-emp-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const fullName = document.getElementById('add-fullname').value.trim();
+    const username = document.getElementById('add-username').value.trim();
+    const password = document.getElementById('add-password').value;
+    const roleSelect = document.getElementById('add-role');
+    const role = isAdmin() && roleSelect ? roleSelect.value : 'employee';
+    if (!fullName || !username || !password) return;
+
+    const db = getDB();
+    if (db.users.find(u => u.username === username)) {
+        showToast('Логин уже занят', 'error');
+        return;
+    }
+
+    db.users.push({
+        id: db.nextId++,
+        username,
+        passwordHash: await sha256(password),
+        fullName,
+        role
+    });
+    saveDB(db);
+    bootstrap.Modal.getInstance(document.getElementById('addEmployeeModal')).hide();
+    this.reset();
+    if (isAdmin()) { renderAdminUsers(); renderAdminTable(); }
+    else { renderEmployees(); renderTable(); }
+    showToast(`${fullName} добавлен`, 'success');
+});
+
+document.getElementById('edit-emp-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const id = parseInt(document.getElementById('edit-emp-id').value);
+    const fullName = document.getElementById('edit-fullname').value.trim();
+    const username = document.getElementById('edit-username').value.trim();
+    const password = document.getElementById('edit-password').value;
+    const db = getDB();
+    const user = db.users.find(u => u.id === id);
+    if (!user) return;
+    if (db.users.find(u => u.username === username && u.id !== id)) {
+        showToast('Логин уже занят', 'error');
+        return;
+    }
+    user.fullName = fullName;
+    user.username = username;
+    if (password) user.passwordHash = await sha256(password);
+    saveDB(db);
+    bootstrap.Modal.getInstance(document.getElementById('editEmployeeModal')).hide();
+    if (isAdmin()) { renderAdminUsers(); renderAdminTable(); }
+    else { renderEmployees(); renderTable(); }
+    showToast('Пользователь обновлён', 'success');
+});
+
+function renderAdminMonthControl() {
+    const year = parseInt(document.getElementById('selYear').value);
+    const month = parseInt(document.getElementById('selMonth').value);
+    const closed = isMonthClosed(year, month);
+    document.getElementById('admin-month-control').innerHTML = `
+        <p>Текущий месяц: <strong>${MONTHS_RU[month-1]} ${year}</strong></p>
+        ${closed
+            ? '<p><span class="badge bg-danger">Месяц закрыт для редактирования</span></p><button class="btn btn-success" onclick="toggleMonthAdmin(false)"><i class="bi bi-unlock"></i> Открыть месяц</button>'
+            : '<p><span class="badge bg-success">Месяц открыт для редактирования</span></p><button class="btn btn-danger" onclick="toggleMonthAdmin(true)"><i class="bi bi-lock"></i> Закрыть месяц</button>'
+        }
+    `;
+}
+
+function toggleMonthAdmin(close) {
+    const year = parseInt(document.getElementById('selYear').value);
+    const month = parseInt(document.getElementById('selMonth').value);
+    const db = getDB();
+    const mk = getMonthKey(year, month);
+    db.months[mk] = { closed: close };
+    saveDB(db);
+    renderAdminTable();
+    renderAdminMonthControl();
+    showToast(close ? 'Месяц закрыт' : 'Месяц открыт', 'success');
+}
+
+function saveAdminRecords() {
+    const db = getDB();
+    const year = parseInt(document.getElementById('selYear').value);
+    const month = parseInt(document.getElementById('selMonth').value);
+    document.querySelectorAll('#admin-table-container .hours-input').forEach(inp => {
+        const empId = parseInt(inp.dataset.empId);
+        const day = parseInt(inp.dataset.day);
+        const hours = parseFloat(inp.value) || 0;
+        const key = getRecordKey(empId, year, month, day);
+        if (hours > 0) {
+            if (!db.records[key]) db.records[key] = { hours: 0, hasBreak: false, breakHours: 0 };
+            db.records[key].hours = hours;
+        } else {
+            delete db.records[key];
+        }
+    });
+    saveDB(db);
+    renderAdminTable();
+    showToast('Данные сохранены', 'success');
+}
+
+function openAdminBreakModal() {
+    const db = getDB();
+    const employees = db.users.filter(u => u.role === 'employee');
+    const sel = document.getElementById('break-employee');
+    sel.innerHTML = employees.map(e => `<option value="${e.id}">${e.fullName}</option>`).join('');
+    loadBreaks();
+    new bootstrap.Modal(document.getElementById('breakModal')).show();
+}
+
+// ===================== BRIGADIER =====================
 function showBrigadier() {
     document.getElementById('page-login').style.display = 'none';
+    document.getElementById('page-admin').style.display = 'none';
     document.getElementById('page-employee').style.display = 'none';
     document.getElementById('page-brigadier').style.display = 'block';
     document.getElementById('brig-name').textContent = currentUser.fullName;
-    initMonthSelectors();
+    document.getElementById('add-role-container').style.display = 'none';
+    initMonthSelectors('selMonthBrig', 'selYearBrig');
     renderTable();
     renderEmployees();
     renderMonthControl();
@@ -109,32 +374,41 @@ function showBrigTab(tabId, el) {
     if (el) el.classList.add('active');
 }
 
-function initMonthSelectors() {
+function initMonthSelectors(monthId, yearId) {
     const now = new Date();
-    const ms = document.getElementById('selMonth');
-    const ys = document.getElementById('selYear');
+    const ms = document.getElementById(monthId);
+    const ys = document.getElementById(yearId);
     ms.innerHTML = '';
     ys.innerHTML = '';
-    for (let m = 0; m < 12; m++) {
-        ms.innerHTML += `<option value="${m+1}" ${m+1===now.getMonth()+1?'selected':''}>${MONTHS_RU[m]}</option>`;
-    }
-    for (let y = 2024; y <= 2030; y++) {
-        ys.innerHTML += `<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`;
-    }
+    for (let m = 0; m < 12; m++) ms.innerHTML += `<option value="${m+1}" ${m+1===now.getMonth()+1?'selected':''}>${MONTHS_RU[m]}</option>`;
+    for (let y = 2024; y <= 2030; y++) ys.innerHTML += `<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`;
 }
 
-function getSelectedYear() { return parseInt(document.getElementById('selYear').value); }
-function getSelectedMonth() { return parseInt(document.getElementById('selMonth').value); }
+function getSelectedYear() {
+    if (isAdmin()) return parseInt(document.getElementById('selYear').value);
+    return parseInt(document.getElementById('selYearBrig').value);
+}
+function getSelectedMonth() {
+    if (isAdmin()) return parseInt(document.getElementById('selMonth').value);
+    return parseInt(document.getElementById('selMonthBrig').value);
+}
 
 function changeMonth(dir) {
     let m = getSelectedMonth() + dir;
     let y = getSelectedYear();
     if (m > 12) { m = 1; y++; }
     if (m < 1) { m = 12; y--; }
-    document.getElementById('selMonth').value = m;
-    document.getElementById('selYear').value = y;
-    renderTable();
-    renderMonthControl();
+    if (isAdmin()) {
+        document.getElementById('selMonth').value = m;
+        document.getElementById('selYear').value = y;
+        renderAdminTable();
+        renderAdminMonthControl();
+    } else {
+        document.getElementById('selMonthBrig').value = m;
+        document.getElementById('selYearBrig').value = y;
+        renderTable();
+        renderMonthControl();
+    }
 }
 
 function renderTable() {
@@ -145,9 +419,7 @@ function renderTable() {
     const closed = isMonthClosed(year, month);
 
     document.getElementById('month-status').innerHTML = closed
-        ? '<span class="badge-closed"><i class="bi bi-lock"></i> Месяц закрыт</span>'
-        : '';
-
+        ? '<span class="badge-closed"><i class="bi bi-lock"></i> Месяц закрыт</span>' : '';
     document.getElementById('table-actions').style.display = closed ? 'none' : 'flex';
 
     let html = '<table class="table table-bordered table-hover time-table mb-0"><thead><tr class="sticky-header-row"><th>ФИО</th>';
@@ -183,23 +455,20 @@ function renderTable() {
     document.getElementById('table-container').innerHTML = html;
 
     document.querySelectorAll('.hours-input').forEach(inp => {
-        inp.addEventListener('input', function() {
-            recalcRow(this.closest('tr'));
-        });
+        inp.addEventListener('input', function() { recalcRow(this.closest('tr'), year, month); });
     });
 }
 
-function recalcRow(tr) {
+function recalcRow(tr, year, month) {
     let totalH = 0;
     const db = getDB();
-    const year = getSelectedYear();
-    const month = getSelectedMonth();
     tr.querySelectorAll('.hours-input').forEach(inp => {
-        const v = parseFloat(inp.value) || 0;
-        totalH += v;
+        totalH += parseFloat(inp.value) || 0;
     });
     let totalB = 0;
     const empId = parseInt(tr.dataset.empId);
+    if (!year) year = getSelectedYear();
+    if (!month) month = getSelectedMonth();
     for (let d = 1; d <= DAYS; d++) {
         const key = getRecordKey(empId, year, month, d);
         const rec = db.records[key];
@@ -214,7 +483,7 @@ function saveAllRecords() {
     const db = getDB();
     const year = getSelectedYear();
     const month = getSelectedMonth();
-    document.querySelectorAll('.hours-input').forEach(inp => {
+    document.querySelectorAll('#table-container .hours-input').forEach(inp => {
         const empId = parseInt(inp.dataset.empId);
         const day = parseInt(inp.dataset.day);
         const hours = parseFloat(inp.value) || 0;
@@ -242,8 +511,8 @@ function openBreakModal() {
 
 function loadBreaks() {
     const empId = parseInt(document.getElementById('break-employee').value);
-    const year = getSelectedYear();
-    const month = getSelectedMonth();
+    const year = isAdmin() ? parseInt(document.getElementById('selYear').value) : getSelectedYear();
+    const month = isAdmin() ? parseInt(document.getElementById('selMonth').value) : getSelectedMonth();
     const db = getDB();
     let html = '<table class="table table-bordered table-sm"><thead><tr><th>Дата</th><th>Часы</th><th>Перерыв</th><th>Часы перерыва</th></tr></thead><tbody>';
     for (let d = 1; d <= DAYS; d++) {
@@ -262,8 +531,8 @@ function loadBreaks() {
 
 function saveBreaks() {
     const empId = parseInt(document.getElementById('break-employee').value);
-    const year = getSelectedYear();
-    const month = getSelectedMonth();
+    const year = isAdmin() ? parseInt(document.getElementById('selYear').value) : getSelectedYear();
+    const month = isAdmin() ? parseInt(document.getElementById('selMonth').value) : getSelectedMonth();
     const db = getDB();
     const checkboxes = document.querySelectorAll('#break-table-container input[type="checkbox"]');
     const numberInputs = document.querySelectorAll('#break-table-container input[type="number"]');
@@ -282,19 +551,20 @@ function saveBreaks() {
     });
 
     saveDB(db);
-    renderTable();
+    if (isAdmin()) renderAdminTable();
+    else renderTable();
     bootstrap.Modal.getInstance(document.getElementById('breakModal')).hide();
     showToast('Перерывы сохранены', 'success');
 }
 
-// EMPLOYEES CRUD
+// BRIGADIER EMPLOYEES (no role assignment)
 function renderEmployees() {
     const db = getDB();
     const employees = db.users.filter(u => u.role === 'employee');
     let html = '<table class="table table-hover mb-0"><thead><tr><th>ФИО</th><th>Логин</th><th>Действия</th></tr></thead><tbody>';
     employees.forEach(e => {
         html += `<tr><td>${e.fullName}</td><td><code>${e.username}</code></td><td>
-            <button class="btn btn-sm btn-outline-primary" onclick="editEmployee(${e.id})"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-sm btn-outline-primary" onclick="editEmployeeBrig(${e.id})"><i class="bi bi-pencil"></i></button>
             <button class="btn btn-sm btn-outline-danger" onclick="deleteEmployee(${e.id},'${e.fullName.replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button>
         </td></tr>`;
     });
@@ -302,35 +572,7 @@ function renderEmployees() {
     document.getElementById('employees-list').innerHTML = html;
 }
 
-document.getElementById('add-emp-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const fullName = document.getElementById('add-fullname').value.trim();
-    const username = document.getElementById('add-username').value.trim();
-    const password = document.getElementById('add-password').value;
-    if (!fullName || !username || !password) return;
-
-    const db = getDB();
-    if (db.users.find(u => u.username === username)) {
-        showToast('Логин уже занят', 'error');
-        return;
-    }
-
-    db.users.push({
-        id: db.nextId++,
-        username,
-        passwordHash: await sha256(password),
-        fullName,
-        role: 'employee'
-    });
-    saveDB(db);
-    bootstrap.Modal.getInstance(document.getElementById('addEmployeeModal')).hide();
-    this.reset();
-    renderEmployees();
-    renderTable();
-    showToast(`Сотрудник ${fullName} добавлен`, 'success');
-});
-
-function editEmployee(id) {
+function editEmployeeBrig(id) {
     const db = getDB();
     const emp = db.users.find(u => u.id === id);
     if (!emp) return;
@@ -341,57 +583,11 @@ function editEmployee(id) {
     new bootstrap.Modal(document.getElementById('editEmployeeModal')).show();
 }
 
-document.getElementById('edit-emp-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const id = parseInt(document.getElementById('edit-emp-id').value);
-    const fullName = document.getElementById('edit-fullname').value.trim();
-    const username = document.getElementById('edit-username').value.trim();
-    const password = document.getElementById('edit-password').value;
-    const db = getDB();
-    const emp = db.users.find(u => u.id === id);
-    if (!emp) return;
-    if (db.users.find(u => u.username === username && u.id !== id)) {
-        showToast('Логин уже занят', 'error');
-        return;
-    }
-    emp.fullName = fullName;
-    emp.username = username;
-    if (password) emp.passwordHash = await sha256(password);
-    saveDB(db);
-    bootstrap.Modal.getInstance(document.getElementById('editEmployeeModal')).hide();
-    renderEmployees();
-    renderTable();
-    showToast('Сотрудник обновлён', 'success');
-});
-
-function deleteEmployee(id, name) {
-    deleteTargetId = id;
-    document.getElementById('delete-name').textContent = name;
-    new bootstrap.Modal(document.getElementById('deleteModal')).show();
-}
-
-function confirmDelete() {
-    if (!deleteTargetId) return;
-    const db = getDB();
-    db.users = db.users.filter(u => u.id !== deleteTargetId);
-    Object.keys(db.records).forEach(key => {
-        if (key.startsWith(deleteTargetId + '_')) delete db.records[key];
-    });
-    saveDB(db);
-    bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
-    renderEmployees();
-    renderTable();
-    showToast('Сотрудник удалён', 'success');
-    deleteTargetId = null;
-}
-
-// MONTH CONTROL
 function renderMonthControl() {
     const year = getSelectedYear();
     const month = getSelectedMonth();
     const closed = isMonthClosed(year, month);
-    const container = document.getElementById('month-control');
-    container.innerHTML = `
+    document.getElementById('month-control').innerHTML = `
         <p>Текущий месяц: <strong>${MONTHS_RU[month-1]} ${year}</strong></p>
         ${closed
             ? '<p><span class="badge bg-danger">Месяц закрыт для редактирования</span></p><button class="btn btn-success" onclick="toggleMonth(false)"><i class="bi bi-unlock"></i> Открыть месяц</button>'
@@ -412,9 +608,10 @@ function toggleMonth(close) {
     showToast(close ? 'Месяц закрыт' : 'Месяц открыт', 'success');
 }
 
-// EMPLOYEE VIEW
+// ===================== EMPLOYEE (READ ONLY) =====================
 function showEmployee() {
     document.getElementById('page-login').style.display = 'none';
+    document.getElementById('page-admin').style.display = 'none';
     document.getElementById('page-brigadier').style.display = 'none';
     document.getElementById('page-employee').style.display = 'block';
     document.getElementById('emp-name').textContent = currentUser.fullName;
@@ -487,6 +684,6 @@ function showToast(msg, type) {
 
 // INIT
 (async function() {
-    await initBrigadierPassword();
+    await initPasswords();
     checkSession();
 })();
